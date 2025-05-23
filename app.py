@@ -145,24 +145,28 @@ def is_job_recent(date_str: str) -> bool:
 
 # ------------------------- FIRECRAWL SCRAPER -------------------------
 def scrape_url(url: str, fc_app: FirecrawlApp) -> pd.DataFrame:
-    resp = fc_app.scrape_url(url, formats=['html'], actions=[{'type':'wait','milliseconds':2000}])
+    resp = fc_app.scrape_url(url, formats=['html'], actions=[{'type':'wait','milliseconds':7000}])
     soup = BeautifulSoup(resp.html, 'html.parser')
     rows = []
     for w in soup.select('div.srp-jobtuple-wrapper'):
+        title_elem = w.select_one('a.title')
+        link = title_elem['href'] if title_elem and title_elem.has_attr('href') else ''
         rows.append({
-            'Title': w.select_one('a.title').get_text(strip=True) or '',
-            'Company': w.select_one('a.comp-name, a.subTitle').get_text(strip=True) or '',
-            'Experience': w.select_one('span.expwdth, li.experience').get_text(strip=True) or '',
-            'Description': w.select_one('span.job-desc, div.job-description').get_text(strip=True) or '',
-            'Posted Date': w.select_one('span.fleft.postedDate, span.job-post-day').get_text(strip=True) or '',
-            'Location': w.select_one('span.locWdth, li.location').get_text(strip=True) or '',
-            'Salary': w.select_one('span.sal-wrap, li.salary').get_text(strip=True) or '',
-            'Skills': ', '.join([t.get_text(strip=True) for t in w.select('li.tag, li.tag-li')]),
+            'Title': title_elem.get_text(strip=True) if title_elem else '',
+            'Company': w.select_one('a.comp-name, a.subTitle').get_text(strip=True) if w.select_one('a.comp-name, a.subTitle') else '',
+            'Experience': w.select_one('span.expwdth, li.experience').get_text(strip=True) if w.select_one('span.expwdth, li.experience') else '',
+            'Description': w.select_one('span.job-desc, div.job-description').get_text(strip=True) if w.select_one('span.job-desc, div.job-description') else '',
+            'Posted Date': w.select_one('span.fleft.postedDate, span.job-post-day').get_text(strip=True) if w.select_one('span.fleft.postedDate, span.job-post-day') else '',
+            'Location': w.select_one('span.locWdth, li.location').get_text(strip=True) if w.select_one('span.locWdth, li.location') else '',
+            'Salary': w.select_one('span.sal-wrap, li.salary').get_text(strip=True) if w.select_one('span.sal-wrap, li.salary') else 'Not disclosed',
+            'Skills': ', '.join(t.get_text(strip=True) for t in w.select('li.tag, li.tag-li')),
+            'Job Link': link
         })
     return pd.DataFrame(rows)
 
 # ------------------------- DOMAIN SCRAPE & PROCESS -------------------------
 def scrape_jobs_for_domain(domain: str, client: Groq, tavily_client: TavilyClient, fc_app: FirecrawlApp) -> pd.DataFrame:
+    global GLOBAL_FIELD
     GLOBAL_FIELD = domain
     keyword = FIELD_KEYWORDS[domain]
     url = f"https://www.naukri.com/jobs-in-india?k={keyword}&l=india&jobAge=3"
@@ -177,8 +181,8 @@ def scrape_jobs_for_domain(domain: str, client: Groq, tavily_client: TavilyClien
 # ------------------------- EXCEL EXPORT -------------------------
 def to_excel(df: pd.DataFrame) -> bytes:
     buf = BytesIO()
-    with pd.ExcelWriter(buf, engine='xlsxwriter') as w:
-        df.to_excel(w, index=False)
+    with pd.ExcelWriter(buf, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False)
     return buf.getvalue()
 
 # ------------------------- STREAMLIT APP -------------------------
